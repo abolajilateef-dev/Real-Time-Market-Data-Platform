@@ -1,0 +1,7 @@
+symbols:
+  BTC-USD:
+    coinbase: BTC-USD
+    binance: BTCUSDT  # Tether, treated as USD proxy
+  ETH-USD:
+    coinbase: ETH-USD
+    binance: ETHUSDT
