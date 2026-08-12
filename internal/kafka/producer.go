@@ -21,6 +21,7 @@ func NewProducer(brokers []string) (*Producer, error) {
 		kgo.SeedBrokers(brokers...),
 		kgo.ProducerLinger(5*time.Millisecond),
 		kgo.RequiredAcks(kgo.AllISRAcks()),
+		kgo.ProducerBatchMaxBytes(5242880),
 	)
 	if err != nil {
 		return nil, fmt.Errorf("kafka producer: %w", err)

@@ -1,4 +1,4 @@
-.PHONY: help up down logs ps tidy build test clean \
+.PHONY: help up down logs ps kafka-topics tidy build test clean \
         run-feedhandler-coinbase run-feedhandler-binance \
         run-bookservice run-persister run-wspublisher
 
@@ -61,3 +61,9 @@ run-wspublisher:
 
 clean:
 	rm -rf bin
+
+kafka-topics:
+	$(COMPOSE) exec redpanda rpk topic create trades --partitions 6 || true
+	$(COMPOSE) exec redpanda rpk topic create book_snapshots --partitions 6 || true
+	$(COMPOSE) exec redpanda rpk topic create book_updates --partitions 6 || true
+	$(COMPOSE) exec redpanda rpk topic create book_tops --partitions 6 || true

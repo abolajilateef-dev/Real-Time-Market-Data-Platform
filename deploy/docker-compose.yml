@@ -13,9 +13,13 @@ services:
       - internal://0.0.0.0:9092,external://0.0.0.0:19092
       - --advertise-kafka-addr
       - internal://redpanda:9092,external://localhost:19092
+      - --set
+      - redpanda.kafka_batch_max_bytes=5242880
     ports:
       - "19092:19092"
       - "9644:9644"
+    volumes:
+      - ./data/redpanda:/var/lib/redpanda/data 
     healthcheck:
       test: ["CMD-SHELL", "rpk cluster health | grep -E 'Healthy:.+true'"]
       interval: 5s
@@ -59,6 +63,7 @@ services:
 
   grafana:
     image: grafana/grafana:11.2.0
+    user: "472:472" 
     environment:
       GF_SECURITY_ADMIN_USER: admin
       GF_SECURITY_ADMIN_PASSWORD: admin
