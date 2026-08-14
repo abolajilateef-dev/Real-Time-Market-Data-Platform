@@ -46,7 +46,7 @@ type coinbaseMatch struct {
 	ProductID string `json:"product_id"`
 	Price     string `json:"price"`
 	Size      string `json:"size"`
-	Side      string `json:"side"` // maker's side; taker's side is the inverse
+	Side      string `json:"side"`
 	Time      string `json:"time"`
 }
 
@@ -59,31 +59,38 @@ func handleMatch(
 ) {
 	var m coinbaseMatch
 	if err := json.Unmarshal(data, &m); err != nil {
+		parseErrors.WithLabelValues("coinbase", "match").Inc()
 		log.Warn("parse match", "err", err)
 		return
 	}
 
 	canonical, ok := symbols.CanonicalSymbol(m.ProductID, "coinbase")
 	if !ok {
+		parseErrors.WithLabelValues("coinbase", "match").Inc()
 		log.Warn("unknown coinbase product", "product_id", m.ProductID)
 		return
 	}
 
 	price, err := strconv.ParseFloat(m.Price, 64)
 	if err != nil {
+		parseErrors.WithLabelValues("coinbase", "match").Inc()
 		log.Warn("parse price", "err", err, "value", m.Price)
 		return
 	}
 	size, err := strconv.ParseFloat(m.Size, 64)
 	if err != nil {
+		parseErrors.WithLabelValues("coinbase", "match").Inc()
 		log.Warn("parse size", "err", err, "value", m.Size)
 		return
 	}
 	exchangeTs, err := time.Parse(time.RFC3339Nano, m.Time)
 	if err != nil {
+		parseErrors.WithLabelValues("coinbase", "match").Inc()
 		log.Warn("parse time", "err", err, "value", m.Time)
 		return
 	}
+
+	messagesReceived.WithLabelValues("coinbase", canonical, "match").Inc()
 
 	trade := schema.Trade{
 		Venue:      "coinbase",
@@ -100,17 +107,20 @@ func handleMatch(
 		if errors.Is(err, context.Canceled) {
 			return
 		}
+		publishErrors.WithLabelValues("coinbase", canonical, topicTrades).Inc()
 		log.Error("publish trade", "err", err, "symbol", canonical)
+		return
 	}
+	messagesPublished.WithLabelValues("coinbase", canonical, topicTrades).Inc()
+	ingestLatency.WithLabelValues("coinbase", canonical, "match").Observe(time.Since(exchangeTs).Seconds())
 }
 
-// takerSideFromMaker flips Coinbase's maker-side into aggressor (taker) side.
 func takerSideFromMaker(makerSide string) schema.Side {
 	switch makerSide {
 	case "buy":
-		return schema.SideAsk // maker was buying → taker was selling
+		return schema.SideAsk
 	case "sell":
-		return schema.SideBid // maker was selling → taker was buying
+		return schema.SideBid
 	default:
 		return schema.SideUnknown
 	}
@@ -135,26 +145,32 @@ func handleSnapshot(
 ) {
 	var s coinbaseSnapshot
 	if err := json.Unmarshal(data, &s); err != nil {
+		parseErrors.WithLabelValues("coinbase", "snapshot").Inc()
 		log.Warn("parse snapshot", "err", err)
 		return
 	}
 
 	canonical, ok := symbols.CanonicalSymbol(s.ProductID, "coinbase")
 	if !ok {
+		parseErrors.WithLabelValues("coinbase", "snapshot").Inc()
 		log.Warn("unknown coinbase product", "product_id", s.ProductID)
 		return
 	}
 
 	bids, err := parseLevels(s.Bids)
 	if err != nil {
+		parseErrors.WithLabelValues("coinbase", "snapshot").Inc()
 		log.Warn("parse snapshot bids", "err", err, "symbol", canonical)
 		return
 	}
 	asks, err := parseLevels(s.Asks)
 	if err != nil {
+		parseErrors.WithLabelValues("coinbase", "snapshot").Inc()
 		log.Warn("parse snapshot asks", "err", err, "symbol", canonical)
 		return
 	}
+
+	messagesReceived.WithLabelValues("coinbase", canonical, "snapshot").Inc()
 
 	tracker.reset(canonical)
 	seq := tracker.next(canonical)
@@ -174,9 +190,11 @@ func handleSnapshot(
 		if errors.Is(err, context.Canceled) {
 			return
 		}
+		publishErrors.WithLabelValues("coinbase", canonical, topicBookSnapshots).Inc()
 		log.Error("publish snapshot", "err", err, "symbol", canonical)
 		return
 	}
+	messagesPublished.WithLabelValues("coinbase", canonical, topicBookSnapshots).Inc()
 	log.Info("snapshot published",
 		"symbol", canonical,
 		"bids", len(bids),
@@ -185,7 +203,6 @@ func handleSnapshot(
 	)
 }
 
-// parseLevels converts Coinbase's [[price, size], ...] into []schema.Level.
 func parseLevels(raw [][]string) ([]schema.Level, error) {
 	out := make([]schema.Level, 0, len(raw))
 	for i, row := range raw {
@@ -224,27 +241,33 @@ func handleL2Update(
 ) {
 	var u coinbaseL2Update
 	if err := json.Unmarshal(data, &u); err != nil {
+		parseErrors.WithLabelValues("coinbase", "l2update").Inc()
 		log.Warn("parse l2update", "err", err)
 		return
 	}
 
 	canonical, ok := symbols.CanonicalSymbol(u.ProductID, "coinbase")
 	if !ok {
+		parseErrors.WithLabelValues("coinbase", "l2update").Inc()
 		log.Warn("unknown coinbase product", "product_id", u.ProductID)
 		return
 	}
 
 	changes, err := parseChanges(u.Changes)
 	if err != nil {
+		parseErrors.WithLabelValues("coinbase", "l2update").Inc()
 		log.Warn("parse l2update changes", "err", err, "symbol", canonical)
 		return
 	}
 
 	exchangeTs, err := time.Parse(time.RFC3339Nano, u.Time)
 	if err != nil {
+		parseErrors.WithLabelValues("coinbase", "l2update").Inc()
 		log.Warn("parse l2update time", "err", err, "value", u.Time)
 		return
 	}
+
+	messagesReceived.WithLabelValues("coinbase", canonical, "l2update").Inc()
 
 	seq := tracker.next(canonical)
 
@@ -261,11 +284,14 @@ func handleL2Update(
 		if errors.Is(err, context.Canceled) {
 			return
 		}
+		publishErrors.WithLabelValues("coinbase", canonical, topicBookUpdates).Inc()
 		log.Error("publish l2update", "err", err, "symbol", canonical, "seq", seq)
+		return
 	}
+	messagesPublished.WithLabelValues("coinbase", canonical, topicBookUpdates).Inc()
+	ingestLatency.WithLabelValues("coinbase", canonical, "l2update").Observe(time.Since(exchangeTs).Seconds())
 }
 
-// parseChanges converts Coinbase's [[side, price, size], ...] into []schema.LevelChange.
 func parseChanges(raw [][]string) ([]schema.LevelChange, error) {
 	out := make([]schema.LevelChange, 0, len(raw))
 	for i, row := range raw {

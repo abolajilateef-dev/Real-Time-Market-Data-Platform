@@ -62,6 +62,7 @@ func stream(
 			return
 		}
 		log.Warn("stream ended, will reconnect", "err", err, "backoff", backoff)
+		reconnects.WithLabelValues("coinbase").Inc()
 
 		select {
 		case <-ctx.Done():
