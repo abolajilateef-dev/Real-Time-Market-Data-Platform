@@ -21,6 +21,7 @@ func NewConsumer(brokers []string, group string, topics ...string) (*Consumer, e
 		kgo.ConsumeTopics(topics...),
 		kgo.DisableAutoCommit(),
 		kgo.FetchMaxBytes(5*1024*1024),
+		kgo.ConsumeResetOffset(kgo.NewOffset().AtStart()),
 	)
 	if err != nil {
 		return nil, fmt.Errorf("kafka consumer: %w", err)

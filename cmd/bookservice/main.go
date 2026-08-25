@@ -7,6 +7,9 @@ import (
 	"os"
 	"os/signal"
 	"syscall"
+	"log/slog"
+
+	"github.com/twmb/franz-go/pkg/kgo"
 
 	"github.com/abolajilateef-dev/mdp/internal/config"
 	"github.com/abolajilateef-dev/mdp/internal/kafka"
