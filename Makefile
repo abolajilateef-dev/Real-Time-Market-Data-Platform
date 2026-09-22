@@ -1,6 +1,6 @@
 .PHONY: help up down logs ps kafka-topics kafka-topics-clean tidy build test clean \
         run-feedhandler-coinbase run-feedhandler-binance \
-        run-bookservice run-persister run-wspublisher
+        run-bookservice run-persister run-wspublisher kafka-topics-test test-integration
 
 MODULE := $(shell go list -m)
 COMPOSE := docker compose -f deploy/docker-compose.yml
@@ -72,3 +72,10 @@ kafka-topics:
 kafka-topics-clean:
 	$(COMPOSE) exec redpanda rpk topic delete trades book_snapshots book_updates book_tops || true
 	$(MAKE) kafka-topics
+
+
+kafka-topics-test:
+	$(COMPOSE) exec redpanda rpk topic create book_updates_test book_snapshots_test book_tops_test --partitions 1 || true
+
+test-integration:
+	MDP_INTEGRATION=1 go test ./cmd/bookservice/ -run TestEndToEndPipeline -v -timeout 90s
